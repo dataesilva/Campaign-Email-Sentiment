@@ -1,0 +1,93 @@
+#Packages
+library(tidytext)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(wordcloud)
+library(readr)
+library(topicmodels)
+#Data from emails
+dat <- #read_csv("data.csv")
+attach(dat)
+dat$id <- (1:3222)
+
+#Convert to more useful date variable
+days=as.Date(date,format="%m/%d/%Y")
+dat_df <- data_frame(sub=subject, from=from, from1=from1, cand=candidate, to=to, date=days, id=id, mess=text)
+
+#Remove Candidates not interested in
+dat_df2 <- dat_df
+dat_df <- filter(dat_df2, cand != 3) #Carson
+dat_df <- filter(dat_df, cand != 9) #Santorum
+dat_df <- filter(dat_df, cand != 10) #Huckabee
+dat_df <- filter(dat_df, cand != 14) #O'Malley
+dat_df <- filter(dat_df, cand != 11) #Bush
+dat_df <- filter(dat_df, cand != 8) #Christie
+dat_df <- filter(dat_df, cand != 5) #Fiorina
+dat_df <- filter(dat_df, cand != 6) #Paul
+dat_df <- filter(dat_df, cand != 0) #Jindal
+dat_df <- filter(dat_df, cand != 15) #Random Others
+
+#Rename Variable for ease
+dat_df$candn <- dat_df$cand
+dat_df$cand[dat_df$candn==1] <- "Trump"
+dat_df$cand[dat_df$candn==2] <- "Cruz"
+dat_df$cand[dat_df$candn==4] <- "Kasich"
+dat_df$cand[dat_df$candn==7] <- "Rubio"
+dat_df$cand[dat_df$candn==12] <- "Clinton"
+dat_df$cand[dat_df$candn==13] <- "Sanders"
+
+#Party ID
+dat_df$party <- NA
+dat_df$party[dat_df$cand=="Trump"] <- "Rep"
+dat_df$party[dat_df$cand=="Cruz"] <- "Rep"
+dat_df$party[dat_df$cand=="Kasich"] <- "Rep"
+dat_df$party[dat_df$cand=="Rubio"] <- "Rep"
+dat_df$party[dat_df$cand=="Clinton"] <- "Dem"
+dat_df$party[dat_df$cand=="Sanders"] <- "Dem"
+
+#Descriptives
+summary(as.factor(dat_df$cand))
+summary(as.factor(dat_df$date))
+summary(as.factor(dat_df$party))
+
+#Email frequency over time
+hist(dat_df$date,1779)
+#Email frequency by candidate
+toplot=data.frame(dat_df$cand,dat_df$date) 
+#Hist colored by candidate
+ggplot(toplot, aes(toplot$dat_df.date, color=factor(toplot$dat_df.cand))) +
+  geom_histogram(position="stack", binwidth=3, aes(y=..count.., fill=factor(toplot$dat_df.cand)),  alpha=0.5)
+#Hist colored by party
+toplot2=data.frame(dat_df$party,dat_df$date)
+ggplot(toplot2, aes(toplot2$dat_df.date, color=factor(toplot2$dat_df.party))) +
+  geom_histogram(position="stack", binwidth=3, aes(y=..count.., fill=factor(toplot2$dat_df.party)),  alpha=0.5)
+
+#Sentiment Analysis
+#Convert to tidytext
+tidy_mess <- dat_df %>%
+  unnest_tokens(word, mess)
+
+data("stop_words")
+custom_stop_words <- bind_rows(data_frame(word = c("Subject", "From", "Date", "To","2016eotjs", "hillaryclinton.com", "gmail.com",
+  "unsubscribe","subject", "la", "taewoo", "p.o", "pm", "1","2","3","4","5","6","7","8","9","10","11","25","50","100"),
+  lexicon = c("custom")), stop_words)
+tidy_mess <- tidy_mess %>%
+  anti_join(custom_stop_words)
+
+tidy_mess %>%
+  count(word, sort=TRUE)
+
+tidy_mess %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+
+#Sentiments and Analysis
+sent_mess_id <- tidy_mess %>%
+  inner_join(get_sentiments("afinn")) %>%
+  group_by(index = id) %>%
+  summarise(sentiment = sum(score))
+plot(sent_mess_id$sentiment)
+
+sent_mess_id$id <- sent_mess_id$index
+dat_df_sent <- merge(dat_df, sent_mess_id, by = "id", all.y = TRUE, all.x = FALSE)
