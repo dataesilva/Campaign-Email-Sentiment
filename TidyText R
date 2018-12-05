@@ -1,19 +1,43 @@
-#Packages
+#Setup
 library(tidytext)
 library(tidyr)
 library(dplyr)
 library(ggplot2)
 library(wordcloud)
-library(readr)
+library(igraph)
+library(ggraph)
 library(topicmodels)
+library(readr)
+library(lme4)
+library(topicmodels)
+library(arm)
+library(optimx)
+library(sjstats)
 #Data from emails
-dat <- #read_csv("data.csv")
+dat <- #read_csv("C:/Users/Silva/Desktop/Content Analysis Sample 1000.csv")
 attach(dat)
 dat$id <- (1:3222)
-
 #Convert to more useful date variable
 days=as.Date(date,format="%m/%d/%Y")
 dat_df <- data_frame(sub=subject, from=from, from1=from1, cand=candidate, to=to, date=days, id=id, mess=text)
+
+#Histograms of email frequency by candidate
+hist(cand0$date,1779,freq=TRUE)
+hist(cand1$date,1779,freq=TRUE)
+hist(cand2$date,1779,freq=TRUE)
+hist(cand3$date,1779,freq=TRUE)
+hist(cand4$date,1779,freq=TRUE)
+hist(cand5$date,1779,freq=TRUE)
+hist(cand6$date,1779,freq=TRUE)
+hist(cand7$date,1779,freq=TRUE)
+hist(cand8$date,1779,freq=TRUE)
+hist(cand9$date,1779,freq=TRUE)
+hist(cand10$date,1779,freq=TRUE)
+hist(cand11$date,1779,freq=TRUE)
+hist(cand12$date,1779,freq=TRUE)
+hist(cand13$date,1779,freq=TRUE)
+hist(cand14$date,1779,freq=TRUE)
+hist(cand15$date,1779,freq=TRUE)
 
 #Remove Candidates not interested in
 dat_df2 <- dat_df
@@ -69,9 +93,7 @@ tidy_mess <- dat_df %>%
   unnest_tokens(word, mess)
 
 data("stop_words")
-custom_stop_words <- bind_rows(data_frame(word = c("Subject", "From", "Date", "To","2016eotjs", "hillaryclinton.com", "gmail.com",
-  "unsubscribe","subject", "la", "taewoo", "p.o", "pm", "1","2","3","4","5","6","7","8","9","10","11","25","50","100"),
-  lexicon = c("custom")), stop_words)
+custom_stop_words <- bind_rows(data_frame(word = c("Subject", "From", "Date", "To","2016eotjs", "hillaryclinton.com", "gmail.com","unsubscribe","subject", "la", "taewoo", "p.o", "pm", "1","2","3","4","5","6","7","8","9","10","11","25","50","100"), lexicon = c("custom")), stop_words)
 tidy_mess <- tidy_mess %>%
   anti_join(custom_stop_words)
 
@@ -91,3 +113,176 @@ plot(sent_mess_id$sentiment)
 
 sent_mess_id$id <- sent_mess_id$index
 dat_df_sent <- merge(dat_df, sent_mess_id, by = "id", all.y = TRUE, all.x = FALSE)
+
+#Start Models
+
+#Simple models
+fit1 <- lm(sentiment~date, data = dat_df_sent)
+summary(fit1)
+fit2 <- lm(sentiment~as.factor(cand), data = dat_df_sent)
+summary(fit2)
+
+#Simple variables
+sent<-dat_df_sent$sentiment
+cands<-dat_df_sent$cand
+dates <- dat_df_sent$date
+
+#Splines: Need 1s to be 1:end
+#Function
+f=c()
+splinecount=function(a, cut){
+  for (i in 1:length(a)){
+    f[i]=ifelse(a[i]>=cut,as.numeric(a[i])-(cut-1),0)
+  }
+  return(f)
+}
+#Cutoffs
+cuts <- as.numeric(as.Date(c("2016-02-01", "2016-02-09", "2016-02-20", "2016-02-23", "2016-02-27",
+                             "2016-03-02", "2016-04-15", "2016-05-03", "2016-06-06",
+                             "2016-07-15", "2016-06-16", "2016-07-12", "2016-07-14",
+                             "2016-07-18", "2016-07-25", "2016-09-26", "2016-10-04",
+                             "2016-10-07", "2016-10-09", "2016-10-15", "2016-10-19")))
+
+#Make Splines
+sdays=splinecount(a=dates, cut=16688)
+iowa=splinecount(a=dates, cut=cuts[1])
+NH=splinecount(a=dates, cut=cuts[2])
+SCR_NevD=splinecount(a=dates, cut=cuts[3])
+NevR=splinecount(a=dates, cut=cuts[4])
+SCD=splinecount(a=dates, cut=cuts[5])
+SupT=splinecount(a=dates, cut=cuts[6])
+FEC1=splinecount(a=dates, cut=cuts[7])
+Trump=splinecount(a=dates, cut=cuts[8])
+Clinton=splinecount(a=dates, cut=cuts[9])
+FEC2=splinecount(a=dates, cut=cuts[10])
+Sand=splinecount(a=dates, cut=cuts[11])
+SandE=splinecount(a=dates, cut=cuts[12])
+Pence=splinecount(a=dates, cut=cuts[13])
+RNC=splinecount(a=dates, cut=cuts[14])
+DNC=splinecount(a=dates, cut=cuts[15])
+Deb1=splinecount(a=dates, cut=cuts[16])
+VPDeb=splinecount(a=dates, cut=cuts[17])
+AH=splinecount(a=dates, cut=cuts[18])
+Deb2=splinecount(a=dates, cut=cuts[19])
+FEC3=splinecount(a=dates, cut=cuts[20])
+Deb3=splinecount(a=dates, cut=cuts[21])
+
+#Multilevel models
+m.empty<- lmer(sent~1 + (1|cands))
+m.dates<- lmer(sent~sdays + (1|cands))
+m.dates2<- lmer(sent~sdays + (sdays|cands))
+m.dates3 <- lmer(sent~1+(sdays|cands))
+m.full <- lmer(sent~sdays+(sdays|cands))
+
+anova(m.dates, m.events)
+anova(m.events, m.events2.brief)
+
+#MLM With splines
+m.events <- lmer(sent ~ sdays + iowa + NH + SCR_NevD + NevR + SCD + SupT + FEC1 + Trump + Clinton
+                 + Sand + SandE + Pence + RNC + DNC + Deb1 + VPDeb + AH + Deb2 + FEC3 + Deb3 + (1|cands))
+display(m.events)
+coef(m.events)
+summary(m.events)
+plot(m.events)
+
+#Best model so far
+m.events.brief <- lmer(sent ~ sdays + iowa + NH + NevR + SCD + Trump + Clinton
+                 + Sand + SandE + RNC + DNC + Deb1 + VPDeb + AH + Deb2 + Deb3 + (1|cands))
+display(m.events.brief)
+coef(m.events.brief)
+summary(m.events.brief)
+plot(m.events.brief)
+
+anova(m.events, m.events.brief)
+
+
+m.events2.brief <- lmer(sent ~ sdays + iowa + SupT + FEC1 + Trump + Clinton + Sand + SandE + Pence
+                        + RNC + DNC + Deb1 + VPDeb + AH + Deb2 + FEC3 + Deb3 + (sdays + iowa + SupT + FEC1 + Trump + Clinton + Sand + SandE + Pence
+                                                                                + RNC + DNC + Deb1 + VPDeb + AH + Deb2 + FEC3 + Deb3|cands))
+display(m.events2.brief)
+coef(m.events2.brief)
+summary(m.events2.brief)
+plot(m.events2)
+
+#Plots for Multilevel models
+plot.m.full <- data.frame(m.full@frame, fitted.re = fitted(m.full))
+myColors <- brewer.pal(16,"Set1") #Max colors is 9, have 16 now
+names(myColors) <- levels(m.full@frame$cands)
+colScale <- scale_color_manual(name = "cands", values = myColors)
+
+plot.m.full <- data.frame(m.full@frame, fitted.re = fitted(m.full))
+g1.m.full <- ggplot(plot.m.full, aes(x = dates, y = sent, colour=as.factor(cands))) + geom_point()
+g2.m.full <- g1.m.full + geom_line(aes(y = fitted.re), linetype = 1, size = 1.5) + scale_x_date()
+g3.m.full <- g2.m.full
+g4.m.full <- g3.m.full + theme_bw()
+print(g4.m.full)
+
+#Full Plot
+plot.m.events.r <- data.frame(m.events@frame, fitted.re = fitted(m.events))
+g1.m.events.r <- ggplot(plot.m.events.r, aes(x = sdays, y = sent, colour=as.factor(cands))) + geom_point()
+g2.m.events.r <- g1.m.events.r + geom_line(aes(y = fitted.re), linetype = 1, size = 1.5) + scale_x_continuous(breaks = 0:500)
+g3.m.events.r <- g2.m.events.r + theme_bw()
+print(g3.m.events.r)
+
+#All spline points
+plot.ev <- data.frame(x=sdays, y=sent, cands=as.factor(cands))
+plot.ev$fit <- predict(m.events)
+g1.ev <- ggplot(plot.ev, aes(x = x, y = y, group=cands)) + geom_line(aes(y=fit, linetype=cands), size=0.8) + 
+  geom_hline(yintercept = 0, linetype="dashed") + theme_bw()
+g2.ev <- g1.ev + geom_text(aes(x=144, label = "start\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=8+144, label = "Iowa\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=19+144, label = "New Hampshire\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=22+144, label = "SCR_NevD\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=26+144, label = "NEVR\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=30+144, label = "SCD\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=74+144, label = "SupT\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=92+144, label = "FEC1\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=126+144, label = "Trump\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=165+144, label = "Clinton\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=136+144, label = "Sand\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=162+144, label = "SandE\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=164+144, label = "Pence\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=168+144, label = "RNC\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=175+144, label = "DNC\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=238+144, label = "Debate 1\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=246+144, label = "VP Debate\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=249+144, label = "Access Hollywood\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=251+144, label = "Debate 2\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=257+144, label = "FEC3\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=261+144, label = "Debate 3\n ", y = 1.5, angle = 90))
+g3.ev <- g2.ev + labs(y = "Sentiment Score", x = "Date")
+g4.ev <- g3.ev + scale_x_continuous(breaks = c(0,144,270,404, 425),labels=c("09/10/15", "2/01/16","6/06/16","10/13/16","11/08/16"))
+print(g4.ev)
+
+#Reduced spline points (Still need to remove lables)
+plot.ev <- data.frame(x=sdays, y=sent, cands=as.factor(cands))
+plot.ev$fit <- predict(m.events.brief)
+g1.ev <- ggplot(plot.ev, aes(x = x, y = y, group=cands)) + geom_line(aes(y=fit, linetype=cands), size=0.8) + 
+  geom_hline(yintercept = 0, linetype="dashed") + theme_bw()
+g2.ev <- g1.ev + geom_text(aes(x=144, label = "start\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=8+144, label = "Iowa\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=19+144, label = "New Hampshire\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=26+144, label = "NEVR\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=30+144, label = "SCD\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=126+144, label = "Trump\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=165+144, label = "Clinton\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=136+144, label = "Sand\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=162+144, label = "SandE\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=168+144, label = "RNC\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=175+144, label = "DNC\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=238+144, label = "Debate 1\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=246+144, label = "VP Debate\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=249+144, label = "Access Hollywood\n ", y = 1.5, angle = 90)) +
+  geom_text(aes(x=251+144, label = "Debate 2\n ", y = 1.5, angle = 90)) + 
+  geom_text(aes(x=261+144, label = "Debate 3\n ", y = 1.5, angle = 90))
+g3.ev <- g2.ev + labs(y = "Sentiment Score", x = "Date")
+g4.ev <- g3.ev + scale_x_continuous(breaks = c(0,144,270,404, 425),labels=c("09/10/15", "2/01/16","6/06/16","10/13/16","11/08/16"))
+print(g4.ev)
+
+
+plot.m.events.r2 <- data.frame(m.events2.brief@frame, fitted.re = fitted(m.events2.brief))
+g1.m.events.r2 <- ggplot(plot.m.events.r2, aes(x = sdays, y = sent, colour=as.factor(cands))) + geom_point()
+g2.m.events.r2 <- g1.m.events.r2 + geom_line(aes(y = fitted.re), linetype = 1, size = 1.5) + scale_x_continuous(breaks = 0:500)
+g3.m.events.r2 <- g2.m.events.r2 + theme_bw()
+print(g3.m.events.r2)
+
